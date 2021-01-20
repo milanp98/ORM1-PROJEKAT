@@ -25,6 +25,14 @@ typedef struct {
 } sr_metod_verifikacije;
 
 typedef struct {
+	char username[DEFAULT_BUFLEN];
+	char password[DEFAULT_BUFLEN];
+    uint8_t ver;
+    uint8_t uLength;
+    uint8_t passLength;
+} upass_auth;
+
+typedef struct {
     uint8_t ver;
     uint8_t cmd;
     uint8_t rsv; 
@@ -95,11 +103,36 @@ typedef struct {
             return 0;
         case 0x01:  //Isto nije tema zadatka
             puts("GSSAPI");
-            close (sock);
+            close(sock);
             return 0;
         case 0x02:  
             puts("Korisnicko ime/lozinka autentifikacija");
-            //realizacija
+
+            char bafer3[DEFAULT_BUFLEN*3], korisnickoIme[DEFAULT_BUFLEN], lozinka[DEFAULT_BUFLEN];
+            memset(bafer3, 1, sizeof(bafer3));
+            upass_auth *autorizacija;
+            autorizacija = (upass_auth *)bafer3;
+            int i;
+            printf("Korisničko ime: ");
+            getchar();  //praznjenje ulaznog toka
+            fgets(korisnickoIme,DEFAULT_BUFLEN,stdin);
+            strcpy(autorizacija->username, korisnickoIme);
+            autorizacija->uLength = strlen(korisnickoIme);
+
+            printf("Lozinka: ");
+            fgets(lozinka,DEFAULT_BUFLEN,stdin);
+            strcpy(autorizacija->password, lozinka);
+            autorizacija->passLength = strlen(lozinka);
+
+            fputs(autorizacija->username, stdout);
+            fputs(autorizacija->password, stdout);
+
+            if(send(sock, autorizacija, sizeof(autorizacija), 0) < 0){
+                perror("Greska pri slanju podataka proksiju!");
+                close(sock);
+                return 1;
+            }
+
             break;
         case 0xff:
             puts("Nepodrzan metod autentifikacije");

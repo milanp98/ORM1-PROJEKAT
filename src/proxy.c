@@ -1,16 +1,16 @@
 #include <sys/socket.h>  
- #include <sys/types.h>  
- #include <resolv.h>  
- #include <string.h>  
- #include <stdlib.h>  
- #include <pthread.h>  
- #include<unistd.h>  
- #include<netdb.h> //hostent  
- #include<arpa/inet.h>  
- 
- #define DEFAULT_BUFLEN 64
- #define DEFAULT_PORT 27015
- #define AUTH 0x02	//Trazeni metod autentifikacije
+#include <sys/types.h>  
+#include <resolv.h>  
+#include <string.h>  
+#include <stdlib.h>  
+#include <pthread.h>  
+#include<unistd.h>  
+#include<netdb.h> //hostent  
+#include<arpa/inet.h>  
+
+#define DEFAULT_BUFLEN 64
+#define DEFAULT_PORT 27015
+#define AUTH 0x02	//Trazeni metod autentifikacije
 
 typedef struct {
     uint8_t ver;
@@ -22,6 +22,14 @@ typedef struct {
     uint8_t ver;
     uint8_t method;
 } sr_metod_verifikacije;
+
+typedef struct {		//63 64 127
+	char username[DEFAULT_BUFLEN];
+	char password[DEFAULT_BUFLEN];
+    uint8_t ver;
+    uint8_t uLength;
+    uint8_t passLength;
+} upass_auth;
 
 typedef struct {
     uint8_t ver;
@@ -90,7 +98,7 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 
 	char bafer1[DEFAULT_BUFLEN], bafer2[DEFAULT_BUFLEN];
 	if(recv(clientSock, bafer1, DEFAULT_BUFLEN, 0) < 0){
-		perror("Greska pri prijemu podataka od klijenta");
+		perror("Greska pri prijemu podataka od klijenta!");
 		return 1;
 	}
 
@@ -115,6 +123,18 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 		puts("Pogresna verzija protokola!");
 		return 1;
 	}
+
+	char bafer3[DEFAULT_BUFLEN*3];
+	upass_auth *autentifikacija;
+	if(recv(clientSock, bafer3, DEFAULT_BUFLEN*3, 0) < 0){
+		perror("Greska pri prijemu podataka od klijenta!");
+		return 1;
+	}
+	autentifikacija = (upass_auth *)bafer3;
+	puts(autentifikacija->username);
+	printf("%hd", autentifikacija->uLength);
+	puts(autentifikacija->password);
+	printf("%hd", autentifikacija->passLength);
 
 //***************************************************
 #pragma region staro
