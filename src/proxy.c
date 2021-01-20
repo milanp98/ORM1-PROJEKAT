@@ -8,12 +8,20 @@
  #include<netdb.h> //hostent  
  #include<arpa/inet.h>  
  
- 
- typedef struct {
+ #define DEFAULT_BUFLEN 64
+ #define DEFAULT_PORT 27015
+ #define AUTH 0x02	//Trazeni metod autentifikacije
+
+typedef struct {
     uint8_t ver;
     uint8_t nmethods;
-    uint8_t methods;
-} client_hello_t; 
+    uint8_t methods[2];
+} cl_metod_verifikacije;
+
+typedef struct {
+    uint8_t ver;
+    uint8_t method;
+} sr_metod_verifikacije;
 
 typedef struct {
     uint8_t ver;
@@ -21,10 +29,97 @@ typedef struct {
     uint8_t rsv; 
     uint8_t atyp;
 } client_request;
- // main entry point  
+
+/*
+ * Funkcija koja proverava da li postoji traženi metod
+ * 
+ * *verif - objekat u kom se traži metod
+ * metod - traženi metod
+ * 
+ * Vraća 1 ako je metod pronađen, 0 ako nije
+ *
+*/
+int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
+	int i;
+	for(i=0; i < verif->nmethods; i++){
+		if(verif->methods[i] == metod)
+			return 1;
+	}
+	return 0;
+}
+
+ 
  int main(int argc,char *argv[])  
  {  
-     char ip[100];  
+	 //Uticnica proksija
+	 int proxySock;
+	 proxySock = socket(AF_INET,SOCK_STREAM, 0);
+	 if(proxySock == -1){
+        printf("Greska pri kreiranju uticnice!\n");
+        return 1;
+    }
+    else printf("Uticnica kreirana\n");
+
+	struct sockaddr_in proxy;
+	proxy.sin_family = AF_INET;
+	proxy.sin_addr.s_addr = INADDR_ANY;
+	if(argc > 1)
+		proxy.sin_port = htons(atoi(argv[1]));
+	else
+		proxy.sin_port = htons(DEFAULT_PORT);
+
+	if(bind(proxySock, (struct sockaddr *)&proxy, sizeof(proxy)) < 0){
+		perror("Greska pri dodavanju adrese uticnici!");
+		return 1;
+	}
+
+	//Podaci klijenta
+	int clientSock, cSize;
+	struct sockaddr_in client;
+
+	//Ocekivanje nadolazecih konekcija
+	listen(proxySock, 1);
+	puts("Cekanje na nadolazece konekcije...");
+
+	clientSock = accept(proxySock, (struct sockaddr *)&client, (socklen_t *)&cSize);
+	if(clientSock < 0){
+		perror("Greska pri prihvatanju konekcije!");
+		return 1;
+	}
+	puts("Konekcija uspostavljena");
+
+	char bafer1[DEFAULT_BUFLEN], bafer2[DEFAULT_BUFLEN];
+	if(recv(clientSock, bafer1, DEFAULT_BUFLEN, 0) < 0){
+		perror("Greska pri prijemu podataka od klijenta");
+		return 1;
+	}
+
+	cl_metod_verifikacije *provera;
+	provera = (cl_metod_verifikacije *)bafer1;
+	if(provera->ver == 0x05){
+		sr_metod_verifikacije *potvrda;
+		potvrda = (sr_metod_verifikacije *)bafer2;
+		potvrda->ver = 0x05;
+
+		if(metodPostoji(provera, AUTH))
+			potvrda->method = AUTH;
+		else
+			potvrda->method = 0xff;
+
+		if(send(clientSock, potvrda, sizeof(potvrda), 0) < 0){
+			perror("Greska pri slanju potvrde metoda verifikacije!");
+			return 1;
+		}
+	}
+	else{
+		puts("Pogresna verzija protokola!");
+		return 1;
+	}
+
+//***************************************************
+#pragma region staro
+
+     /*char ip[100];  
      char proxy_port[100];  
      // accept arguments from terminal  
      strcpy(ip,argv[1]); // server ip  
@@ -59,11 +154,16 @@ typedef struct {
      }  
       printf("waiting for connection..\n");  
       //accept all client connections continuously  
-      while(1)  
+*/
+#pragma endregion
+
+      /*while(1)  
       {  
-           client_fd = accept(proxy_fd, (struct sockaddr*)NULL ,NULL);  
-           printf("client no. %d connected\n",client_fd);  
-           if(client_fd > 0)  
+           client_sock = accept(proxy_fd, (struct sockaddr*)NULL ,NULL);  
+           printf("client no. %d connected\n",client_fd); 
+
+          
+		   if(client_sock > 0)  
            {            
 		     	char buffer[65535];  
 				int bytes =0;  
@@ -71,7 +171,7 @@ typedef struct {
 				//receive data from client  
 		   
 			    memset(&buffer, '\0', sizeof(buffer));  
-				bytes = read(client_fd, buffer, sizeof(buffer));  
+				bytes = read(client_sock, buffer, sizeof(buffer));  
            
 				client_hello_t *provera;
 				provera = (client_hello_t *)buffer;
@@ -143,7 +243,11 @@ typedef struct {
                 sleep(1);
 			}  
            }  
-      }  
-      return 0;  
+      }  */
+
+	close(proxySock);
+	close(clientSock);
+
+	return 0;  
  }  
  
