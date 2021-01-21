@@ -9,6 +9,7 @@
 #include<arpa/inet.h>  
 
 #define DEFAULT_BUFLEN 64
+#define BUF_SIZE 1024
 #define DEFAULT_PORT 27015
 #define AUTH 0x02	//Trazeni metod autentifikacije
 
@@ -28,7 +29,7 @@ typedef struct {
     uint8_t status;
 } auth_status;
 
-typedef struct {		//63 64 127
+typedef struct {
     uint8_t ver;
     uint8_t uLength;
     uint8_t passLength;
@@ -40,6 +41,73 @@ typedef struct {
     uint8_t rsv; 
     uint8_t atyp;
 } client_request;
+
+typedef struct {
+    uint8_t ver;
+    uint8_t rep;
+    uint8_t rsv;
+    uint8_t atyp;
+} proxy_response;
+
+/*
+ * Funkcija koja prosleđuje pakete između dve utičnice
+ * 
+ * fd1 - utičnica 1
+ * fd2 - utičnica 2
+*/
+void tcp_forward(int fd1, int fd2)
+{
+    uint8_t buf[BUF_SIZE];
+
+    int nfds;
+    nfds = fd1 > fd2 ? fd1 : fd2;
+    nfds += 1;
+
+    fd_set readfds;
+    struct timeval timeout;
+
+    while (1) {
+        FD_ZERO(&readfds);
+        FD_SET(fd1, &readfds);
+        FD_SET(fd2, &readfds);
+
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
+        int ret;
+        ret = select(nfds, &readfds, NULL, NULL, &timeout);
+        if (ret == 0) continue;
+        if (ret == -1) {
+            perror("select greška");
+            return;
+        }
+
+        bzero(buf, BUF_SIZE);
+        if (FD_ISSET(fd1, &readfds)) {
+            ret = recv(fd1, buf, BUF_SIZE, 0);
+            if (ret == 0) {
+                printf("Veza prekinuta od strane udaljenog hosta fd1\n");
+                return;
+            }
+            if (ret == -1) {
+                perror("recv greška");
+                return;
+            }
+            send(fd2, buf, ret, 0);
+        } else {
+            ret = recv(fd2, buf, BUF_SIZE, 0);
+            if (ret == 0) {
+                printf("Veza prekinuta od strane udaljenog hosta fd2\n");
+                return;
+            }
+            if (ret == -1) {
+                perror("recv greška");
+                return;
+            }
+            send(fd1, buf, ret, 0);
+        }
+    }
+}
 
 /*
  * Funkcija koja proverava da li postoji traženi metod
@@ -66,10 +134,10 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 	 int proxySock;
 	 proxySock = socket(AF_INET,SOCK_STREAM, 0);
 	 if(proxySock == -1){
-        printf("Greska pri kreiranju uticnice!\n");
+        printf("Greška pri kreiranju utičnice!\n");
         return 1;
     }
-    else printf("Uticnica kreirana\n");
+    else printf("Utičnica kreirana\n");
 
 	struct sockaddr_in proxy;
 	proxy.sin_family = AF_INET;
@@ -80,7 +148,7 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 		proxy.sin_port = htons(DEFAULT_PORT);
 
 	if(bind(proxySock, (struct sockaddr *)&proxy, sizeof(proxy)) < 0){
-		perror("Greska pri dodavanju adrese uticnici!");
+		perror("Greška pri dodavanju adrese utičnici!");
 		return 1;
 	}
 
@@ -90,18 +158,18 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 
 	//Ocekivanje nadolazecih konekcija
 	listen(proxySock, 1);
-	puts("Cekanje na nadolazece konekcije...");
+	puts("Čekanje na nadolazeće konekcije...");
 
 	clientSock = accept(proxySock, (struct sockaddr *)&client, (socklen_t *)&cSize);
 	if(clientSock < 0){
-		perror("Greska pri prihvatanju konekcije!");
+		perror("Greška pri prihvatanju konekcije!");
 		return 1;
 	}
 	puts("Konekcija uspostavljena");
 
 	char bafer1[DEFAULT_BUFLEN], bafer2[DEFAULT_BUFLEN];
 	if(recv(clientSock, bafer1, DEFAULT_BUFLEN, 0) < 0){
-		perror("Greska pri prijemu podataka od klijenta!");
+		perror("Greška pri prijemu podataka od klijenta!");
 		return 1;
 	}
 
@@ -118,23 +186,23 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 			potvrda->method = 0xff;
 
 		if(send(clientSock, potvrda, sizeof(potvrda), 0) < 0){
-			perror("Greska pri slanju potvrde metoda verifikacije!");
+			perror("Greška pri slanju potvrde metoda verifikacije!");
 			return 1;
 		}
 	}
 	else{
-		puts("Pogresna verzija protokola!");
+		puts("Pogrešna verzija protokola!");
 		return 1;
 	}
 
 	//Prijem korisničkog imena i lozinke
 	char baferIme[DEFAULT_BUFLEN], baferLozinka[DEFAULT_BUFLEN];
 	if(recv(clientSock, baferIme, DEFAULT_BUFLEN, 0) < 0){
-		perror("Greska pri prijemu podataka od klijenta!");
+		perror("Greška pri prijemu podataka od klijenta!");
 		return 1;
 	}
 	if(recv(clientSock, baferLozinka, DEFAULT_BUFLEN, 0) < 0){
-		perror("Greska pri prijemu podataka od klijenta!");
+		perror("Greška pri prijemu podataka od klijenta!");
 		return 1;
 	}
 	for(int i = 0; i<strlen(baferIme); i++){	
@@ -156,23 +224,24 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 	authStatus = (auth_status *)authBaf;
 	authStatus->ver = 0x01;
 	if(strcmp(baferIme, "admin") == 0 && strcmp(baferLozinka, "bafer") == 0){
-		puts("Prijava uspesna");
+		puts("Prijava uspešna");
 		authStatus->status = 0x00;
 	}
 	else{
-		puts("Prijava neuspesna");
+		puts("Prijava neuspešna");
 		authStatus->status = 0x01;
 	}
 	if(send(clientSock, authStatus, sizeof(authStatus), 0) < 0){
-		perror("Greska pri slanju potvrde metoda verifikacije!");
+		perror("Greška pri slanju potvrde metoda verifikacije!");
 		return 1;
 	}
+	if(authStatus->status != 0x00) return 0;
 
 	//Zahtev i usluge
 	char bafZahtev[DEFAULT_BUFLEN], serverIP[DEFAULT_BUFLEN];
 	uint16_t serverPort;
     if(recv(clientSock, bafZahtev, DEFAULT_BUFLEN, 0) < 0){
-        perror("Greska pri prijemu podataka od klijenta!");
+        perror("Greška pri prijemu podataka od klijenta!");
         return 1;
     }
     client_request *zahtev;
@@ -182,7 +251,7 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 			case 0x01:	//TCP
 				//Prijem adrese servera
 				if(recv(clientSock, serverIP, DEFAULT_BUFLEN, 0) < 0){
-					perror("Greska pri prijemu adrese od klijenta!");
+					perror("Greška pri prijemu adrese od klijenta!");
 					return 1;
 				}
 				for(int i = 0; i<strlen(serverIP); i++){	
@@ -191,153 +260,66 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 						break;
 					}
 				}
-
 				//Prijem porta servera
 				if(recv(clientSock, &serverPort, sizeof(uint16_t), 0) < 0){
-					perror("Greska pri prijemu podataka od klijenta!");
+					perror("Greška pri prijemu podataka od klijenta!");
 					return 1;
 				}
-				printf("%d", serverPort);
 				break;
+
 			case 0x02:	//Bind (za FTP) - ne radimo
-				break;
+				close(proxySock);
+				close(clientSock);
+				return 0;
 			case 0x03:	//UDP - ne radimo
-				break;
+				close(proxySock);
+				close(clientSock);
+				return 0;
+			default:
+				close(proxySock);
+				close(clientSock);
+				return 0;
 		}
 	}
 	else{
-		puts("Pogresna verzija protokola!");
+		puts("Pogrešna verzija protokola!");
 		return 1;
 	}
 
-//***************************************************
+	char baferOdgovor[DEFAULT_BUFLEN];
+	proxy_response *prOdg;
+	prOdg = (proxy_response *)baferOdgovor;
+	prOdg->ver = 0x05;   //verzija protokola
+	prOdg->rep = 0x00;   //uspešno
+	prOdg->rsv = 0x00;   //beskorisno
+	prOdg->atyp = 0x01;  //tip adrese
+	//Slanje odgovora za traženu uslugu
+	if(send(clientSock, prOdg, sizeof(prOdg), 0) < 0){
+		perror("Greška pri slanju odgovora klijentu!");
+		return 1;
+	}
 
+	//Utičnica za server
+	int serverSock;
+	serverSock = socket(AF_INET, SOCK_STREAM, 0);
+	if(serverSock < 0)  
+	{  
+		printf("Greška pri kreiranju utičnice za server\n");  
+	}  
+	struct sockaddr_in server;
+	server.sin_family = AF_INET;
+	server.sin_port = htons(serverPort);
+	server.sin_addr.s_addr = inet_addr(serverIP);
 
-     /*char ip[100];  
-     char proxy_port[100];  
-     // accept arguments from terminal  
-     strcpy(ip,argv[1]); // server ip  
-     strcpy(proxy_port,argv[2]); // proxy port    
-     printf("proxy port is %s",proxy_port);        
-     printf("\n");  
-     //socket variables  
-     int proxy_fd =0, client_fd=0;  
-     struct sockaddr_in proxy_sd;  
-     // add this line only if server exits when client exits  
-     signal(SIGPIPE,SIG_IGN);  
-     // create a socket  
-     if((proxy_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)  
-     {  
-        printf("\nFailed to create socket");  
-     }  
-     printf("Proxy created\n");  
-     memset(&proxy_sd, 0, sizeof(proxy_sd));  
-     // set socket variables  
-     proxy_sd.sin_family = AF_INET;  
-     proxy_sd.sin_port = htons(atoi(proxy_port));  
-     proxy_sd.sin_addr.s_addr = INADDR_ANY;  
-     // bind the socket  
-     if((bind(proxy_fd, (struct sockaddr*)&proxy_sd,sizeof(proxy_sd))) < 0)  
-     {  
-          printf("Failed to bind a socket");  
-     }  
-     // start listening to the port for new connections  
-     if((listen(proxy_fd, SOMAXCONN)) < 0)  
-     {  
-          printf("Failed to listen");  
-     }  
-      printf("waiting for connection..\n");  
-      //accept all client connections continuously  
-*/
+	//Povezivanje na glavni server 
+	if(connect(serverSock, (struct sockaddr *)&server, sizeof(server))<0)  
+	{  
+		perror("Greška pri uspostavljanju konekcije sa serverom");
+		return 1;
+	}  
+	puts("Uspostavljena konekcija sa serverom");
 
-
-      /*while(1)  
-      {  
-           client_sock = accept(proxy_fd, (struct sockaddr*)NULL ,NULL);  
-           printf("client no. %d connected\n",client_fd); 
-
-          
-		   if(client_sock > 0)  
-           {            
-		     	char buffer[65535];  
-				int bytes =0;  
-				
-				//receive data from client  
-		   
-			    memset(&buffer, '\0', sizeof(buffer));  
-				bytes = read(client_sock, buffer, sizeof(buffer));  
-           
-				client_hello_t *provera;
-				provera = (client_hello_t *)buffer;
-				if((provera->ver == 0x05) && (provera->methods == 0x02)) {
-					puts("SOCKS5 protokol\n");
-					puts("Uspesno izabran username/password metod\n");
-				} else {
-	  		    puts("Greska\n"); }
-			   
- 				char username[100];
-				char pass[100];
-				
-				bytes = read(client_fd, username, sizeof(username));                        
-				bytes = read(client_fd, pass, sizeof(pass));  
-			
-				if((strcmp(username, "marko") != 0) || (strcmp(pass, "orm1") != 0)) {					
-					puts("Pogresna lozinka ili username\n");	
-					return 1;
-				} else {
-					puts("Prijava uspesna\n");  
-			                           
-				printf("Client : ");                    
-				fputs(username,stdout); 
-				printf("\n"); 			
-				
-				
-				bytes = read(client_fd, buffer, sizeof(buffer));
-				
-				client_request *prov;
-				prov = (client_request *)buffer;
-				if((prov->cmd == 0x01) && (prov->ver == 0x05) && (prov->rsv == 0x00)) {
-					puts("Izabrana opcija TCP CONNECT na server\n");
-				} else {
-					puts("Greska \n");
-					return 1;
-	  		    } 
-				
-				
-				char ip_server[100];
-				char port_server[100];
-      				
-				bytes = read(client_fd, ip_server, sizeof(ip_server));    
-				bytes = read(client_fd, port_server, sizeof(port_server));
-				   
-				int server_fd =0;  
-				struct sockaddr_in server_sd;  
-				// create a socket  
-				server_fd = socket(AF_INET, SOCK_STREAM, 0);  
-				if(server_fd < 0)  
-				{  
-					printf("server socket not created\n");  
-				}  
-				printf("server socket created\n");       
-				memset(&server_sd, 0, sizeof(server_sd));  
-				// set socket variables  
-				server_sd.sin_family = AF_INET;  
-				server_sd.sin_port = htons(atoi(port_server));  
-				server_sd.sin_addr.s_addr = inet_addr(ip_server);  
-				//connect to main server from this proxy server  
-				if((connect(server_fd, (struct sockaddr *)&server_sd, sizeof(server_sd)))<0)  
-				{  
-					printf("server connection not established");  
-				}  
-				printf("server socket connected\n");  
-				
-				write(server_fd, username, sizeof(username));
-                write(server_fd, pass, sizeof(pass));  
-      
-                sleep(1);
-			}  
-           }  
-      }  */
+	tcp_forward(clientSock, serverSock);
 
 	close(proxySock);
 	close(clientSock);

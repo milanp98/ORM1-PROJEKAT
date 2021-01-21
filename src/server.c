@@ -1,68 +1,77 @@
-#include <sys/socket.h>  
- #include <sys/types.h>  
- #include <resolv.h>  
- #include <string.h>  
- #include <pthread.h>  
- #include<unistd.h>  
- 
- // main entry point  
- int main()  
- {  
-      int client_fd;   
-      int fd = 0 ;  
-      struct sockaddr_in server_sd;  
-      // create a socket  
-      fd = socket(AF_INET, SOCK_STREAM, 0);  
-      printf("Server started\n");  
-      memset(&server_sd, 0, sizeof(server_sd));  
-      // set socket variables  
-      server_sd.sin_family = AF_INET;  
-      server_sd.sin_port = htons(5010);  
-      server_sd.sin_addr.s_addr = INADDR_ANY;  
-      // bind socket to the port  
-      bind(fd, (struct sockaddr*)&server_sd,sizeof(server_sd));  
-      // start listening at the given port for new connection requests  
-      listen(fd, SOMAXCONN);  
-      // continuously accept connections in while(1) loop  
-      while(1)  
-      {  
-           // accept any incoming connection  
-           client_fd = accept(fd, (struct sockaddr*)NULL ,NULL);  
-           //printf("accepted client with id: %d",client_fd);  
-           // if true then client request is accpted  
-           if(client_fd > 0)  
-           {  
-                   
-                printf("proxy connected\n");     
-                
-				char buffer[65535];  
-				int bytes = 0;  
-				while(1)  
-				{  
-					//receive data from client  
-					memset(&buffer,'\0',sizeof(buffer));  
-					bytes = read(client_fd, buffer, sizeof(buffer));  
-					if(bytes <0)  
-					{  
-						//perror("read");  
-					}  
-					else if(bytes == 0)  
-					{  
-					}  
-					else  
-					{  
-						//send the same data back to client  
-						// similar to echo server  
-						write(client_fd, buffer, sizeof(buffer));  
-						//printf("client fd is : %d\n",c_fd);                    
-						//printf("From client:\n");                    
-						fputs(buffer,stdout);       
-					}  
-					fflush(stdout);  
-				};        
-                
-           }  
-      }  
-      close(client_fd);   
-      return 0;  
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <resolv.h>
+#include <string.h>
+#include <pthread.h>
+#include<unistd.h>
+#include <stdlib.h>
+
+#define SIZE 1024
+
+void write_file(int sockfd){
+     int n;
+     FILE *fp;
+     char *filename = "recv.txt";
+     char buffer[SIZE];
+
+     fp = fopen(filename, "w");
+     while (1) {
+          n = recv(sockfd, buffer, SIZE, 0);
+          if (n <= 0){
+               break;
+               return;
+          }
+          fprintf(fp, "%s", buffer);
+          bzero(buffer, SIZE);
+     }
+     puts("Prijem datoteke uspešno izvršen");
+     return;
+}
+
+int main(int argc,char *argv[])
+{  
+     //Utičnica servera
+     int serverSock;
+     serverSock = socket(AF_INET, SOCK_STREAM, 0);
+     if(serverSock == -1){
+          printf("Greska pri kreiranju uticnice!\n");
+          return 1;
+     }  
+     else printf("Uticnica kreirana\n");
+
+     struct sockaddr_in server;
+	server.sin_family = AF_INET;
+     server.sin_addr.s_addr = INADDR_ANY; 
+     if(argc > 1)
+	     server.sin_port = htons(atoi(argv[1]));
+	else
+		server.sin_port = htons(27000);
+
+     if(bind(serverSock, (struct sockaddr *)&server, sizeof(server)) < 0){
+          perror("Greska pri dodavanju adrese uticnici!");
+          return 1;
+     }
+
+     //Podaci klijenta
+	int clientSock, cSize;
+	struct sockaddr_in client;
+
+     //Ocekivanje nadolazecih konekcija
+     listen(serverSock, 1);  
+	puts("Čekanje na nadolazeće konekcije...");
+  
+     // accept any incoming connection  
+     clientSock = accept(serverSock, (struct sockaddr*)&client, (socklen_t *)&cSize);
+     if(clientSock < 0){
+		perror("Greska pri prihvatanju konekcije!");
+		return 1;
+	}
+     puts("Konekcija uspostavljena");
+     
+     write_file(clientSock);
+
+     close(serverSock);
+     close(clientSock);
+
+     return 0;  
  }  

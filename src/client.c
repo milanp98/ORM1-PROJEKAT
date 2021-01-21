@@ -12,7 +12,8 @@
 #include <sys/sendfile.h>
 
 #define DEFAULT_BUFLEN 64
-
+#define SIZE 1024
+#define FILENAME "fajl.txt"
 typedef struct {
     uint8_t ver;
     uint8_t nmethods;
@@ -43,7 +44,31 @@ typedef struct {
     uint8_t rsv; 
     uint8_t atyp;
 } client_request;
-	
+
+typedef struct {
+    uint8_t ver;
+    uint8_t rep;
+    uint8_t rsv;
+    uint8_t atyp;
+} proxy_response;
+
+/*
+ * Funkcija za slanje fajla
+ * 
+ * *fp - datoteka koja se šalje
+ * sockfd - utičnica na koju se šalje
+*/
+void send_file(FILE *fp, int sockfd){
+  char data[SIZE] = {0};
+
+  while(fgets(data, SIZE, fp) != NULL) {
+    if (send(sockfd, data, sizeof(data), 0) == -1) {
+      perror("Greška pri slanju fajla");
+      exit(1);
+    }
+    bzero(data, SIZE);
+  }
+}
     
  int main(int argc, char* argv[])  
  {  
@@ -51,10 +76,10 @@ typedef struct {
     int sock;
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock == -1){
-        printf("Greska pri kreiranju uticnice!\n");
+        printf("Greška pri kreiranju utičnice!\n");
         return 1;
     }
-    else printf("Uticnica kreirana\n");
+    else printf("Utičnica kreirana\n");
 
     //Adresa proksija
     char proxyIP[17];
@@ -74,10 +99,10 @@ typedef struct {
 
     //Uspostavljanje konekcije sa proksijem
     if(connect(sock, (struct sockaddr *)&proxy, sizeof(proxy)) < 0){
-        perror("Greska pri uspostavljanju konekcije sa proksijem");
+        perror("Greška pri uspostavljanju konekcije sa proksijem");
         return 1;
     }
-    printf("Uspesna konekcija sa proksijem!\n");
+    printf("Uspešna konekcija sa proksijem!\n");
 
     char bafer1[DEFAULT_BUFLEN];
     cl_metod_verifikacije *podrzane_metode;
@@ -89,7 +114,7 @@ typedef struct {
 
     //Slanje strukture za potvrdu metoda verifikacije
     if(send(sock, podrzane_metode, sizeof(podrzane_metode), 0) < 0){
-        perror("Greska pri slanju metoda verifikacije proksiju!");
+        perror("Greška pri slanju metoda verifikacije proksiju!");
         return 1;
     }
 
@@ -97,7 +122,7 @@ typedef struct {
     //Autentifikacija
     char bafer2[DEFAULT_BUFLEN];
     if(recv(sock, bafer2, DEFAULT_BUFLEN, 0) < 0){
-        perror("Greska pri prijemu podataka od proksija!");
+        perror("Greška pri prijemu podataka od proksija!");
         return 1;
     }
     sr_metod_verifikacije *prijemPotvrde;
@@ -112,7 +137,7 @@ typedef struct {
             close(sock);
             return 0;
         case 0x02:  //Realizovano
-            puts("Korisnicko ime/lozinka autentifikacija");
+            puts("Korisničko ime/lozinka autentifikacija");
 
             char korisnickoIme[DEFAULT_BUFLEN], lozinka[DEFAULT_BUFLEN];
 
@@ -120,7 +145,7 @@ typedef struct {
             getchar();  //praznjenje ulaznog toka
             fgets(korisnickoIme,DEFAULT_BUFLEN,stdin);
             if(send(sock, korisnickoIme, strlen(korisnickoIme), 0) < 0){
-                perror("Greska pri slanju podataka proksiju!");
+                perror("Greška pri slanju podataka proksiju!");
                 close(sock);
                 return 1;
             }
@@ -128,13 +153,13 @@ typedef struct {
             printf("Lozinka: ");
             fgets(lozinka,DEFAULT_BUFLEN,stdin);
             if(send(sock, lozinka, strlen(lozinka), 0) < 0){
-                perror("Greska pri slanju podataka proksiju!");
+                perror("Greška pri slanju podataka proksiju!");
                 close(sock);
                 return 1;
             }
             break;
         case 0xff:
-            puts("Nepodrzan metod autentifikacije");
+            puts("Nepodržan metod autentifikacije");
             close(sock);
             return 0;
         default:
@@ -143,17 +168,14 @@ typedef struct {
     }
 
     //Provera validnosti autentifikacije
-    
     uint8_t baf[2];
     if(recv(sock, baf, sizeof(uint8_t)*2, 0) < 0){
-        perror("Greska pri prijemu podataka od proksija!");
+        perror("Greška pri prijemu podataka od proksija!");
         return 1;
     }
     auth_status *autentifikacija;
     autentifikacija = (auth_status *)baf;
-
     if(autentifikacija->status == 0x00){
-
         char bafer4[DEFAULT_BUFLEN];
         client_request *clZahtev;
         clZahtev = (client_request *)bafer4;
@@ -163,7 +185,7 @@ typedef struct {
         clZahtev->atyp = 0x01;  //tip adrese
         //Slanje strukture za potvrdu metoda verifikacije
         if(send(sock, clZahtev, sizeof(clZahtev), 0) < 0){
-            perror("Greska pri slanju metoda verifikacije proksiju!");
+            perror("Greška pri slanju metoda verifikacije proksiju!");
             return 1;
         }
 
@@ -171,11 +193,10 @@ typedef struct {
         char serverIP[DEFAULT_BUFLEN];
         printf("Adresa servera: ");
         fgets(serverIP,DEFAULT_BUFLEN,stdin);
-        puts(serverIP);
 
         //Slanje adrese servera proksiju
         if(send(sock, serverIP, DEFAULT_BUFLEN, 0) < 0){
-            perror("Greska pri slanju metoda verifikacije proksiju!");
+            perror("Greška pri slanju metoda verifikacije proksiju!");
             return 1;
         }
         
@@ -186,114 +207,36 @@ typedef struct {
 
         //Slanje porta servera proksiju
         if(send(sock, &serverPort, sizeof(uint16_t), 0) < 0){
-            perror("Greska pri slanju metoda verifikacije proksiju!");
+            perror("Greška pri slanju metoda verifikacije proksiju!");
             return 1;
         }
     }
     else{
-        puts("Pogresno korisnicko ime/lozinka!");
+        puts("Pogrešno korisničko ime/lozinka!");
         close(sock);
         return 0;
     }
-//**********************************************************************************
 
+    //Prijem odgovora - otprilike beskorisno
+    char bafer5[DEFAULT_BUFLEN];
+    if(recv(sock, bafer5, DEFAULT_BUFLEN, 0) < 0){
+        perror("Greška pri prijemu odgovora od proksija!");
+        return 1;
+    }
+    proxy_response *prOdg;
+    prOdg = (proxy_response *)bafer5;
+    if(prOdg->rep == 0x00) puts("Uspostava konekcije sa serverom");
 
-      //socket variables  
-      /*char IP[200];  
-      char port[200];  
-      //char buffer[65535];  
-      int client_socket;  
-      struct sockaddr_in client_sd;  //proxy
-      printf("\nEnter proxy address:");  
-      fgets(IP,sizeof("127.0.01\n")+1,stdin);  
-      fputs(IP,stdout);  
-      printf("\nEnter a port:");  
-      fgets(port,sizeof("5000\n")+1,stdin);  
-      fputs(port,stdout);  */
-  
-      // create a socket  
-      /*client_socket = socket(AF_INET, SOCK_STREAM, 0);
-	  if (client_socket == -1)
-      {
-        fprintf(stderr, "Error creating socket %s\n", strerror(errno));
+    FILE *fp;
 
-        exit(EXIT_FAILURE);
-      }*/
-           
-      //memset(&client_sd, 0, sizeof(client_sd));  
-      // set socket variables  
-      /*client_sd.sin_family = AF_INET;  
-      client_sd.sin_port = htons(5000);  
-      // assign any IP address to the client's socket  
-      client_sd.sin_addr.s_addr = INADDR_ANY;   
-      // connect to proxy server at mentioned port number  
-      connect(client_socket, (struct sockaddr *)&client_sd, sizeof(client_sd));  */
-      //odradjeno do ovog dela
-      //send and receive data continuously
- 
-       
- /*      while(1)  
-            {  		
+    fp = fopen(FILENAME, "r");
+    if (fp == NULL) {
+        perror("Greška pro čitanju fajla");
+        close(sock);
+        exit(1);
+    }
 
-            puts("Unesite vase korisnicko ime");
-            char user[100];
-            scanf("%s", user);
-            
-            puts("Unesite sifru");
-            char password[100];
-            scanf("%s", password);
-            
-            
-            if (send(client_socket, &user, sizeof(user), 0) < 0)
-            {
-                perror("send failed. Error");
-                return 1;
-            } 
-            
-            if (send(client_socket, &password, sizeof(password), 0) < 0)
-            {
-                perror("send failed. Error");
-                return 1;
-            } 
-            
-            char req_buf[1024];
-			client_request * request;
-			request = (client_request *)req_buf;
-			request->ver = 0x05;
-			request->cmd= 0x01;
-			request->rsv= 0x00;
-			request->atyp = 0x01;
-			
-			if (send(client_socket, request, sizeof(request), 0) < 0)
-            {
-                perror("send failed. Error");
-                return 1;
-            } 
-            
-               
-			puts("Unesite ip adresu servera");
-            char server_ip[100];
-            scanf("%s", server_ip);
-            
-            puts("Unesite port servera");
-            char server_port[100];
-            scanf("%s", server_port);
-            
-            
-            if (send(client_socket, &server_ip, sizeof(server_ip), 0) < 0)
-            {
-                perror("send failed. Error");
-                return 1;
-            } 
-            
-            if (send(client_socket, &server_port, sizeof(server_port), 0) < 0)
-            {
-                perror("send failed. Error");
-                return 1;
-            } 
-            
-           };  */
-           //close(sd);
+    send_file(fp, sock);
 
     close(sock);
 
