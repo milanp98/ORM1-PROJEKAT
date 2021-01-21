@@ -231,7 +231,7 @@ void send_file(FILE *fp, int sockfd){
 
     fp = fopen(FILENAME, "r");
     if (fp == NULL) {
-        perror("Greška pro čitanju fajla");
+        perror("Greška pri čitanju fajla");
         close(sock);
         exit(1);
     }
