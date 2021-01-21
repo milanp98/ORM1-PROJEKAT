@@ -23,13 +23,16 @@ typedef struct {
     uint8_t method;
 } sr_metod_verifikacije;
 
+typedef struct {
+    uint8_t ver;
+    uint8_t status;
+} auth_status;
+
 typedef struct {		//63 64 127
-	char username[DEFAULT_BUFLEN];
-	char password[DEFAULT_BUFLEN];
     uint8_t ver;
     uint8_t uLength;
     uint8_t passLength;
-} upass_auth;
+} upass_auth_len;
 
 typedef struct {
     uint8_t ver;
@@ -124,20 +127,91 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 		return 1;
 	}
 
-	char bafer3[DEFAULT_BUFLEN*3];
-	upass_auth *autentifikacija;
-	if(recv(clientSock, bafer3, DEFAULT_BUFLEN*3, 0) < 0){
+	//Prijem korisničkog imena i lozinke
+	char baferIme[DEFAULT_BUFLEN], baferLozinka[DEFAULT_BUFLEN];
+	if(recv(clientSock, baferIme, DEFAULT_BUFLEN, 0) < 0){
 		perror("Greska pri prijemu podataka od klijenta!");
 		return 1;
 	}
-	autentifikacija = (upass_auth *)bafer3;
-	puts(autentifikacija->username);
-	printf("%hd", autentifikacija->uLength);
-	puts(autentifikacija->password);
-	printf("%hd", autentifikacija->passLength);
+	if(recv(clientSock, baferLozinka, DEFAULT_BUFLEN, 0) < 0){
+		perror("Greska pri prijemu podataka od klijenta!");
+		return 1;
+	}
+	for(int i = 0; i<strlen(baferIme); i++){	
+		if(baferIme[i] == '\n'){
+			baferIme[i] = 0;
+			break;
+		}
+	}
+	for(int i = 0; i<strlen(baferLozinka); i++){	
+		if(baferLozinka[i] == '\n'){
+			baferLozinka[i] = 0;
+			break;
+		}
+	}
+
+	//Status autorizacije
+	auth_status *authStatus;
+	uint8_t authBaf[2];
+	authStatus = (auth_status *)authBaf;
+	authStatus->ver = 0x01;
+	if(strcmp(baferIme, "admin") == 0 && strcmp(baferLozinka, "bafer") == 0){
+		puts("Prijava uspesna");
+		authStatus->status = 0x00;
+	}
+	else{
+		puts("Prijava neuspesna");
+		authStatus->status = 0x01;
+	}
+	if(send(clientSock, authStatus, sizeof(authStatus), 0) < 0){
+		perror("Greska pri slanju potvrde metoda verifikacije!");
+		return 1;
+	}
+
+	//Zahtev i usluge
+	char bafZahtev[DEFAULT_BUFLEN], serverIP[DEFAULT_BUFLEN];
+	uint16_t serverPort;
+    if(recv(clientSock, bafZahtev, DEFAULT_BUFLEN, 0) < 0){
+        perror("Greska pri prijemu podataka od klijenta!");
+        return 1;
+    }
+    client_request *zahtev;
+    zahtev = (client_request *)bafZahtev;
+	if(zahtev->ver == 0x05){
+		switch(zahtev->cmd){
+			case 0x01:	//TCP
+				//Prijem adrese servera
+				if(recv(clientSock, serverIP, DEFAULT_BUFLEN, 0) < 0){
+					perror("Greska pri prijemu adrese od klijenta!");
+					return 1;
+				}
+				for(int i = 0; i<strlen(serverIP); i++){	
+					if(serverIP[i] == '\n'){
+						serverIP[i] = 0;
+						break;
+					}
+				}
+
+				//Prijem porta servera
+				if(recv(clientSock, &serverPort, sizeof(uint16_t), 0) < 0){
+					perror("Greska pri prijemu podataka od klijenta!");
+					return 1;
+				}
+				printf("%d", serverPort);
+				break;
+			case 0x02:	//Bind (za FTP) - ne radimo
+				break;
+			case 0x03:	//UDP - ne radimo
+				break;
+		}
+	}
+	else{
+		puts("Pogresna verzija protokola!");
+		return 1;
+	}
 
 //***************************************************
-#pragma region staro
+
 
      /*char ip[100];  
      char proxy_port[100];  
@@ -175,7 +249,7 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
       printf("waiting for connection..\n");  
       //accept all client connections continuously  
 */
-#pragma endregion
+
 
       /*while(1)  
       {  

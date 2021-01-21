@@ -25,6 +25,11 @@ typedef struct {
 } sr_metod_verifikacije;
 
 typedef struct {
+    uint8_t ver;
+    uint8_t status;
+} auth_status;
+
+typedef struct {
 	char username[DEFAULT_BUFLEN];
 	char password[DEFAULT_BUFLEN];
     uint8_t ver;
@@ -60,7 +65,6 @@ typedef struct {
     uint16_t proxyPort;
     printf("Port proksija: ");
     scanf("%hd", &proxyPort);
-    //sin_addr.s_addr
 
     //Uticnica proksija
     struct sockaddr_in proxy;
@@ -89,6 +93,8 @@ typedef struct {
         return 1;
     }
 
+
+    //Autentifikacija
     char bafer2[DEFAULT_BUFLEN];
     if(recv(sock, bafer2, DEFAULT_BUFLEN, 0) < 0){
         perror("Greska pri prijemu podataka od proksija!");
@@ -105,34 +111,27 @@ typedef struct {
             puts("GSSAPI");
             close(sock);
             return 0;
-        case 0x02:  
+        case 0x02:  //Realizovano
             puts("Korisnicko ime/lozinka autentifikacija");
 
-            char bafer3[DEFAULT_BUFLEN*3], korisnickoIme[DEFAULT_BUFLEN], lozinka[DEFAULT_BUFLEN];
-            memset(bafer3, 1, sizeof(bafer3));
-            upass_auth *autorizacija;
-            autorizacija = (upass_auth *)bafer3;
-            int i;
+            char korisnickoIme[DEFAULT_BUFLEN], lozinka[DEFAULT_BUFLEN];
+
             printf("Korisničko ime: ");
             getchar();  //praznjenje ulaznog toka
             fgets(korisnickoIme,DEFAULT_BUFLEN,stdin);
-            strcpy(autorizacija->username, korisnickoIme);
-            autorizacija->uLength = strlen(korisnickoIme);
-
-            printf("Lozinka: ");
-            fgets(lozinka,DEFAULT_BUFLEN,stdin);
-            strcpy(autorizacija->password, lozinka);
-            autorizacija->passLength = strlen(lozinka);
-
-            fputs(autorizacija->username, stdout);
-            fputs(autorizacija->password, stdout);
-
-            if(send(sock, autorizacija, sizeof(autorizacija), 0) < 0){
+            if(send(sock, korisnickoIme, strlen(korisnickoIme), 0) < 0){
                 perror("Greska pri slanju podataka proksiju!");
                 close(sock);
                 return 1;
             }
 
+            printf("Lozinka: ");
+            fgets(lozinka,DEFAULT_BUFLEN,stdin);
+            if(send(sock, lozinka, strlen(lozinka), 0) < 0){
+                perror("Greska pri slanju podataka proksiju!");
+                close(sock);
+                return 1;
+            }
             break;
         case 0xff:
             puts("Nepodrzan metod autentifikacije");
@@ -143,10 +142,61 @@ typedef struct {
             return 0;
     }
 
+    //Provera validnosti autentifikacije
+    
+    uint8_t baf[2];
+    if(recv(sock, baf, sizeof(uint8_t)*2, 0) < 0){
+        perror("Greska pri prijemu podataka od proksija!");
+        return 1;
+    }
+    auth_status *autentifikacija;
+    autentifikacija = (auth_status *)baf;
 
+    if(autentifikacija->status == 0x00){
 
+        char bafer4[DEFAULT_BUFLEN];
+        client_request *clZahtev;
+        clZahtev = (client_request *)bafer4;
+        clZahtev->ver = 0x05;   //verzija protokola
+        clZahtev->cmd = 0x01;   //komanda za TCP konekciju
+        clZahtev->rsv = 0x00;   //beskorisno
+        clZahtev->atyp = 0x01;  //tip adrese
+        //Slanje strukture za potvrdu metoda verifikacije
+        if(send(sock, clZahtev, sizeof(clZahtev), 0) < 0){
+            perror("Greska pri slanju metoda verifikacije proksiju!");
+            return 1;
+        }
+
+        //Adresa servera
+        char serverIP[DEFAULT_BUFLEN];
+        printf("Adresa servera: ");
+        fgets(serverIP,DEFAULT_BUFLEN,stdin);
+        puts(serverIP);
+
+        //Slanje adrese servera proksiju
+        if(send(sock, serverIP, DEFAULT_BUFLEN, 0) < 0){
+            perror("Greska pri slanju metoda verifikacije proksiju!");
+            return 1;
+        }
+        
+        //Port servera
+        uint16_t serverPort;
+        printf("Port servera: ");
+        scanf("%hd", &serverPort);
+
+        //Slanje porta servera proksiju
+        if(send(sock, &serverPort, sizeof(uint16_t), 0) < 0){
+            perror("Greska pri slanju metoda verifikacije proksiju!");
+            return 1;
+        }
+    }
+    else{
+        puts("Pogresno korisnicko ime/lozinka!");
+        close(sock);
+        return 0;
+    }
 //**********************************************************************************
-#pragma region staro
+
 
       //socket variables  
       /*char IP[200];  
@@ -180,7 +230,7 @@ typedef struct {
       connect(client_socket, (struct sockaddr *)&client_sd, sizeof(client_sd));  */
       //odradjeno do ovog dela
       //send and receive data continuously
-#pragma endregion  
+ 
        
  /*      while(1)  
             {  		
