@@ -72,7 +72,7 @@ void send_file(FILE *fp, int sockfd){
     
  int main(int argc, char* argv[])  
  {  
-    //Uticnica klijenta
+    //Utičnica klijenta
     int sock;
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock == -1){
@@ -91,7 +91,7 @@ void send_file(FILE *fp, int sockfd){
     printf("Port proksija: ");
     scanf("%hd", &proxyPort);
 
-    //Uticnica proksija
+    //Utičnica proksija
     struct sockaddr_in proxy;
     proxy.sin_addr.s_addr = inet_addr(proxyIP);
     proxy.sin_family = AF_INET;
