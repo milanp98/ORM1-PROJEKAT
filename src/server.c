@@ -3,7 +3,7 @@
 #include <resolv.h>
 #include <string.h>
 #include <pthread.h>
-#include<unistd.h>
+#include <unistd.h>
 #include <stdlib.h>
 
 #define SIZE 1024

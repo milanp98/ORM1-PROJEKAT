@@ -130,7 +130,7 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
  
  int main(int argc,char *argv[])  
  {  
-	 //Uticnica proksija
+	 //Utičnica proksija
 	 int proxySock;
 	 proxySock = socket(AF_INET,SOCK_STREAM, 0);
 	 if(proxySock == -1){
@@ -156,7 +156,7 @@ int metodPostoji(cl_metod_verifikacije *verif, uint8_t metod){
 	int clientSock, cSize;
 	struct sockaddr_in client;
 
-	//Ocekivanje nadolazecih konekcija
+	//Očekivanje nadolazećih konekcija
 	listen(proxySock, 1);
 	puts("Čekanje na nadolazeće konekcije...");
 
