@@ -34,10 +34,10 @@ int main(int argc,char *argv[])
      int serverSock;
      serverSock = socket(AF_INET, SOCK_STREAM, 0);
      if(serverSock == -1){
-          printf("Greska pri kreiranju uticnice!\n");
+          printf("Greška pri kreiranju utičnice!\n");
           return 1;
      }  
-     else printf("Uticnica kreirana\n");
+     else printf("Utičnica kreirana\n");
 
      struct sockaddr_in server;
 	server.sin_family = AF_INET;
@@ -48,7 +48,7 @@ int main(int argc,char *argv[])
 		server.sin_port = htons(27000);
 
      if(bind(serverSock, (struct sockaddr *)&server, sizeof(server)) < 0){
-          perror("Greska pri dodavanju adrese uticnici!");
+          perror("Greška pri dodavanju adrese utičnici!");
           return 1;
      }
 
@@ -56,14 +56,14 @@ int main(int argc,char *argv[])
 	int clientSock, cSize;
 	struct sockaddr_in client;
 
-     //Ocekivanje nadolazecih konekcija
+     //Očekivanje nadolazećih konekcija
      listen(serverSock, 1);  
 	puts("Čekanje na nadolazeće konekcije...");
   
-     // accept any incoming connection  
+     //Prihvatanje nadolazećih konekcija
      clientSock = accept(serverSock, (struct sockaddr*)&client, (socklen_t *)&cSize);
      if(clientSock < 0){
-		perror("Greska pri prihvatanju konekcije!");
+		perror("Greška pri prihvatanju konekcije!");
 		return 1;
 	}
      puts("Konekcija uspostavljena");
